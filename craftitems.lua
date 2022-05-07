@@ -5,6 +5,7 @@
 -- Get Craft Items --
 
 local ice_block = "default:ice"
+local getnode = minetest.get_node
 
 minetest.register_on_mods_loaded(function()
 	for name, def in pairs(minetest.registered_items) do
@@ -20,7 +21,7 @@ end)
 local dragon_drops = {}
 
 local function is_node_walkable(pos)
-	local name = minetest.get_node(pos).name
+	local name = getnode(pos).name
 	if not name then return false end
 	local def = minetest.registered_nodes[name]
 	return def and def.walkable
@@ -130,6 +131,26 @@ minetest.register_craftitem("draconis:draconic_steel_ingot_ice", {
 -- Eggs --
 ----------
 
+local function check_pedestal(pos, sm, slen)
+	local p = {x = pos.x - 1, y = pos.y - 1, z = pos.z - 1}
+	if string.sub(getnode(p).name,1, slen) ~= sm then return end
+	p.x = p.x + 1
+	if string.sub(getnode(p).name,1, slen) ~= sm then return end
+	p.x = p.x + 1
+	if string.sub(getnode(p).name,1, slen) ~= sm then return end
+	p.z = p.z + 1
+	if string.sub(getnode(p).name,1, slen) ~= sm then return end
+	p.z = p.z + 1
+	if string.sub(getnode(p).name,1, slen) ~= sm then return end
+	p.x = p.x - 1
+	if string.sub(getnode(p).name,1, slen) ~= sm then return end
+	p.x = p.x - 1
+	if string.sub(getnode(p).name,1, slen) ~= sm then return end
+	p.z = p.z - 1
+	if string.sub(getnode(p).name,1, slen) ~= sm then return end
+	return true
+end
+
 local dragon_eggs = {}
 
 for color, hex in pairs(draconis.colors_fire) do
@@ -155,35 +176,17 @@ for color, hex in pairs(draconis.colors_fire) do
 		},
 		groups = {cracky = 1, level = 3},
 		sounds = draconis.sounds.stone,
-		on_construct = function(pos)
+		after_place_node = function(pos, placer)
+			local meta = minetest.get_meta(pos)
+			meta:set_string("owner", placer:get_player_name())
 			local timer = minetest.get_node_timer(pos)
 			timer:start(6)
 		end,
 		on_timer = function(pos)
-			local burning = 0
-			local burn_check = {
-				vector.add(pos, {x = 1, y = -1, z = 0}),
-				vector.add(pos, {x = 1, y = -1, z = 1}),
-				vector.add(pos, {x = 0, y = -1, z = 1}),
-				vector.add(pos, {x = -1, y = -1, z = 1}),
-				vector.add(pos, {x = -1, y = -1, z = 0}),
-				vector.add(pos, {x = -1, y = -1, z = -1}),
-				vector.add(pos, {x = 0, y = -1, z = -1}),
-				vector.add(pos, {x = 1, y = -1, z = -1})
-			}
-			for i = 1, #burn_check do
-				local node = minetest.get_node(burn_check[i])
-				local name = node.name
-				if name:match("^draconis:fire_scale_block_") then
-					burning = burning + 1
-				end
-				if burning == 8 then
-					minetest.add_entity(pos, "draconis:egg_fire_dragon_" .. color)
-					minetest.remove_node(pos)
-					break
-				end
-			end
-			return true
+			if not check_pedestal(pos, "draconis:fire_scale_block_", 26) then return true end
+			local owner = minetest.get_meta(pos):get_string("owner")
+			minetest.add_entity(pos, "draconis:egg_fire_dragon_" .. color, "return {[\"owner\"] = \"" .. owner .. "\"}")
+			minetest.remove_node(pos)
 		end
 	})
 
@@ -212,7 +215,7 @@ for color, hex in pairs(draconis.colors_fire) do
 		-- Function
 		activate_func = function(self, staticdata, dtime)
 			self.progress = self:recall("progress") or 0
-			self.owner_name = self:recall("owner_name") or ""
+			self.owner_name = self:recall("owner_name") or self.owner or ""
 			self.color = color
 			if color == "black" then
 				self.tex_no = 1
@@ -229,22 +232,14 @@ for color, hex in pairs(draconis.colors_fire) do
 		step_func = function(self, dtime)
 			local pos = self.object:get_pos()
 			self:memorize("progress", self.progress)
-			for _, obj in ipairs(minetest.get_objects_inside_radius(pos, 6)) do
-				if obj and obj:is_player() then
-					minetest.after(1.5, function()
-						self.owner_name = self:memorize("owner_name", obj:get_player_name())
-					end)
-				end
-			end
-			local node = minetest.get_node(pos)
-			local name = node.name
+			local name = getnode(pos).name
 			if minetest.get_node_group(name, "fire") > 0 then
 				self.progress = self.progress + self.dtime
 				if not self.hatching then
 					self.hatching = true
 					self.object:set_animation({x = 1, y = 40}, 30, 0)
 				end
-				if self.progress >= 1000 then
+				if self.progress >= 1 then
 					local object = minetest.add_entity(pos, "draconis:fire_dragon")
 					local ent = object:get_luaentity()
 					ent.age = ent:memorize("age", 1)
@@ -302,35 +297,17 @@ for color, hex in pairs(draconis.colors_ice) do
 		},
 		groups = {cracky = 1, level = 3},
 		sounds = draconis.sounds.stone,
-		on_construct = function(pos)
+		after_place_node = function(pos, placer)
+			local meta = minetest.get_meta(pos)
+			meta:set_string("owner", placer:get_player_name())
 			local timer = minetest.get_node_timer(pos)
 			timer:start(6)
 		end,
 		on_timer = function(pos)
-			local burning = 0
-			local burn_check = {
-				vector.add(pos, {x = 1, y = 0, z = 0}),
-				vector.add(pos, {x = 1, y = 0, z = 1}),
-				vector.add(pos, {x = 0, y = 0, z = 1}),
-				vector.add(pos, {x = -1, y = 0, z = 1}),
-				vector.add(pos, {x = -1, y = 0, z = 0}),
-				vector.add(pos, {x = -1, y = 0, z = -1}),
-				vector.add(pos, {x = 0, y = 0, z = -1}),
-				vector.add(pos, {x = 1, y = 0, z = -1})
-			}
-			for i = 1, #burn_check do
-				local node = minetest.get_node(burn_check[i])
-				local name = node.name
-				if name:match("^draconis:ice_scale_block_") then
-					burning = burning + 1
-				end
-				if burning == 8 then
-					minetest.add_entity(pos, "draconis:egg_ice_dragon_" .. color)
-					minetest.remove_node(pos)
-					break
-				end
-			end
-			return true
+			if not check_pedestal(pos, "draconis:ice_scale_block_", 25) then return true end
+			local owner = minetest.get_meta(pos):get_string("owner")
+			minetest.add_entity(pos, "draconis:egg_ice_dragon_" .. color, , "return {[\"owner\"] = \"" .. owner .. "\"}")
+			minetest.remove_node(pos)
 		end
 	})
 
@@ -359,7 +336,7 @@ for color, hex in pairs(draconis.colors_ice) do
 		-- Function
 		activate_func = function(self, staticdata, dtime)
 			self.progress = self:recall("progress") or 0
-			self.owner_name = self:recall("owner_name") or ""
+			self.owner_name = self:recall("owner_name") or self.owner or ""
 			if color == "light_blue" then
 				self.tex_no = 1
 			elseif color == "sapphire" then
@@ -375,15 +352,7 @@ for color, hex in pairs(draconis.colors_ice) do
 		step_func = function(self, dtime)
 			local pos = self.object:get_pos()
 			self:memorize("progress", self.progress)
-			for _, obj in ipairs(minetest.get_objects_inside_radius(pos, 6)) do
-				if obj and obj:is_player() then
-					minetest.after(1.5, function()
-						self.owner_name = self:memorize("owner_name", obj:get_player_name())
-					end)
-				end
-			end
-			local node = minetest.get_node(pos)
-			local name = node.name
+			local name = getnode(pos).name
 			if minetest.get_node_group(name, "water") > 0
 			or (self.progress > 0 and name == ice_block) then
 				if minetest.get_node_group(name, "water") > 0 then
@@ -422,7 +391,6 @@ for color, hex in pairs(draconis.colors_ice) do
 				pos.y = pos.y + 0.5
 				minetest.add_item(pos, {name = "draconis:egg_ice_" .. color})
 			end
-			self.object:remove()
 		end
 	})
 end
@@ -536,7 +504,7 @@ minetest.register_craftitem("draconis:dragon_horn", {
 	on_place = function(itemstack, player, pointed_thing)
 		local meta = itemstack:get_meta()
 		local pos = pointed_thing.above
-		local under = minetest.get_node(pointed_thing.under)
+		local under = getnode(pointed_thing.under)
 		local node = minetest.registered_nodes[under.name]
 		if node and node.on_rightclick then
 			return node.on_rightclick(pointed_thing.under, under, player, itemstack)
@@ -624,7 +592,7 @@ minetest.register_craftitem("draconis:dragon_flute", {
 	on_place = function(itemstack, player, pointed_thing)
 		local meta = itemstack:get_meta()
 		local pos = pointed_thing.above
-		local under = minetest.get_node(pointed_thing.under)
+		local under = getnode(pointed_thing.under)
 		local node = minetest.registered_nodes[under.name]
 		if node and node.on_rightclick then
 			return node.on_rightclick(pointed_thing.under, under, player, itemstack)
